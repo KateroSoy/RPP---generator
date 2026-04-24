@@ -1,13 +1,4 @@
-import express from "express";
-import dotenv from "dotenv";
-dotenv.config({ override: true });
-import { createServer as createViteServer } from "vite";
-import path from "path";
-import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const PROMPT_TEMPLATE = `Anda adalah seorang Ahli Kurikulum dan Guru Penggerak bersertifikasi dari Kemendikbudristek Indonesia.
 Tugas Anda adalah merancang Rencana Pelaksanaan Pembelajaran (RPP) atau Modul Ajar yang sangat detail, profesional, mutakhir, dan berstandar nasional, siap digunakan langsung oleh guru untuk keperluan akreditasi, supervisi, dan proses Kegiatan Belajar Mengajar (KBM) yang sebenarnya.
@@ -54,75 +45,56 @@ PENTING:
 - PASTIKAN ANDA MENGHASILKAN DOKUMEN SECARA LENGKAP DARI AWAL HINGGA BAGIAN TANDA TANGAN TANPA KEPOTONG/TERPOTONG. JANGAN menyingkat atau memotong kalimat.
 `;
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
-
-  app.use(express.json({ limit: "50mb" }));
-
-  // API Route for generating RPP
-  app.post("/api/generate", async (req, res) => {
-    try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: "GEMINI_API_KEY environment variable is missing on the server" });
-      }
-
-      const { data } = req.body;
-      if (!data) {
-        return res.status(400).json({ error: "Data is required" });
-      }
-
-      const inputText = Object.entries(data)
-        .filter(([_, value]) => value !== undefined && value !== "")
-        .map(([key, value]) => '- ' + key + ': ' + value)
-        .join("\n");
-        
-      const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
-
-      const ai = new GoogleGenAI({ apiKey });
-      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-      const response = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 8192,
-        },
-      });
-
-      const responseText = response.response.text();
-      res.json({ text: responseText });
-
-    } catch (error: any) {
-      console.error("API error:", error);
-      let errMsg = error.message || "Failed to generate RPP";
-      if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
-        errMsg = "API Key Gemini tidak valid! Silakan periksa Settings > Secrets (jika di AI Studio) atau file .env Anda, dan pastikan kunci API benar.";
-      }
-      res.status(500).json({ error: errMsg });
-    }
-  });
-
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: false },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    // Support React Router HTML5 History
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+export default async function handler(req: any, res: any) {
+  // Only allow POST requests
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "GEMINI_API_KEY environment variable is missing on the server" });
+    }
 
-startServer();
+    const { data } = req.body;
+    if (!data) {
+      return res.status(400).json({ error: "Data is required" });
+    }
+
+    const inputText = Object.entries(data)
+      .filter(([_, value]) => value !== undefined && value !== "")
+      .map(([key, value]) => '- ' + key + ': ' + value)
+      .join("\n");
+      
+    const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
+
+    const ai = new GoogleGenAI({ apiKey });
+    const model = ai.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 8192,
+      },
+    });
+
+    const response = await model.generateContent(prompt);
+
+
+    const result = await response.response;
+    const responseText = result.text();
+    
+    res.status(200).json({ text: responseText });
+  } catch (error: any) {
+    console.error("API error:", error);
+    let errMsg = error.message || "Failed to generate RPP";
+    
+    if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
+      errMsg = "API Key Gemini tidak valid! Silakan periksa Vercel Environment Variables dan pastikan kunci API benar.";
+    } else if (errMsg.includes("429") || errMsg.includes("quota")) {
+      errMsg = "Quota API Gemini telah habis (429). Silakan coba lagi nanti atau gunakan kunci API lain.";
+    }
+
+    res.status(500).json({ error: errMsg });
+  }
+}
