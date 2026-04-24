@@ -80,9 +80,12 @@ async function startServer() {
         
       const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
 
+      console.log("Generating RPP via /api/generate (using ai.models.generateContent)");
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+
+        model: "gemini-2.0-flash",
+
         contents: prompt,
         config: {
           temperature: 0.7,
@@ -95,8 +98,10 @@ async function startServer() {
 
 
     } catch (error: any) {
-      console.error("API error:", error);
+      console.error("API error details:", JSON.stringify(error, null, 2));
+      console.error("API error message:", error.message);
       let errMsg = error.message || "Failed to generate RPP";
+
       if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
         errMsg = "API Key Gemini tidak valid! Silakan periksa Settings > Secrets (jika di AI Studio) atau file .env Anda, dan pastikan kunci API benar.";
       }
