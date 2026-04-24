@@ -52,50 +52,66 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: "GEMINI_API_KEY environment variable is missing on the server" });
-    }
-
-    const { data } = req.body;
-    if (!data) {
-      return res.status(400).json({ error: "Data is required" });
-    }
-
-    const inputText = Object.entries(data)
-      .filter(([_, value]) => value !== undefined && value !== "")
-      .map(([key, value]) => '- ' + key + ': ' + value)
-      .join("\n");
-      
-    const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
-
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-
-      contents: prompt,
-      config: {
-        temperature: 0.7,
-        maxOutputTokens: 8192,
-      },
-    });
-
-    const responseText = response.text || "";
-    res.status(200).json({ text: responseText });
-
-  } catch (error: any) {
-    console.error("API error:", error);
-    let errMsg = error.message || "Failed to generate RPP";
-    
-    if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
-      errMsg = "API Key Gemini tidak valid! Silakan periksa Vercel Environment Variables dan pastikan kunci API benar.";
-    } else if (errMsg.includes("429") || errMsg.includes("quota")) {
-      errMsg = "Quota API Gemini telah habis (429). Silakan coba lagi nanti atau gunakan kunci API lain.";
-    }
-
-    res.status(500).json({ error: errMsg });
+  const apiKeys = (process.env.GEMINI_API_KEY || "").split(",").map(k => k.trim()).filter(k => k);
+  
+  if (apiKeys.length === 0) {
+    return res.status(500).json({ error: "GEMINI_API_KEY environment variable is missing on the server" });
   }
+
+  let lastError = null;
+
+  // Try each API key until one works or we run out
+  for (const apiKey of apiKeys) {
+    try {
+      const { data } = req.body;
+      if (!data) {
+        return res.status(400).json({ error: "Data is required" });
+      }
+
+      const inputText = Object.entries(data)
+        .filter(([_, value]) => value !== undefined && value !== "")
+        .map(([key, value]) => '- ' + key + ': ' + value)
+        .join("\n");
+        
+      const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
+
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: prompt,
+        config: {
+          temperature: 0.7,
+          maxOutputTokens: 8192,
+        },
+      });
+
+      const responseText = response.text || "";
+      return res.status(200).json({ text: responseText });
+
+    } catch (error: any) {
+      lastError = error;
+      const msg = error.message || "";
+      console.error(`Key ${apiKey.substring(0, 8)}... failed:`, msg);
+      
+      if (!msg.includes("429") && !msg.includes("quota") && !msg.includes("limit")) {
+        break;
+      }
+      console.log("Quota exceeded, trying next key...");
+    }
+  }
+
+  // If we get here, all keys failed
+  const error = lastError;
+  let errMsg = error?.message || "Failed to generate RPP";
+  
+  if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
+    errMsg = "API Key Gemini tidak valid! Silakan periksa Vercel Environment Variables dan pastikan kunci API benar.";
+  } else if (errMsg.includes("429") || errMsg.includes("quota")) {
+    errMsg = "Quota SEMUA API Key Gemini Anda telah habis. Silakan tambahkan API Key baru di Vercel Settings.";
+  }
+
+  res.status(500).json({ error: errMsg });
+}
 
 
 }

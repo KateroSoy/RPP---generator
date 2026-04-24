@@ -64,57 +64,68 @@ async function startServer() {
 
   // API Route for generating RPP
   app.post("/api/generate", async (req, res) => {
-    try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: "GEMINI_API_KEY environment variable is missing on the server" });
-      }
-
-      const { data } = req.body;
-      if (!data) {
-        return res.status(400).json({ error: "Data is required" });
-      }
-
-      const inputText = Object.entries(data)
-        .filter(([_, value]) => value !== undefined && value !== "")
-        .map(([key, value]) => '- ' + key + ': ' + value)
-        .join("\n");
-        
-      const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
-
-      console.log("Generating RPP via /api/generate (using ai.models.generateContent)");
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-
-        model: "gemini-2.0-flash",
-
-        contents: prompt,
-        config: {
-          temperature: 0.7,
-          maxOutputTokens: 8192,
-        },
-      });
-
-      const responseText = response.text || "";
-      res.json({ text: responseText });
-
-
-    } catch (error: any) {
-      console.error("API error details:", JSON.stringify(error, null, 2));
-      console.error("API error message:", error.message);
-      
-      let errMsg = error.message || "Failed to generate RPP";
-
-      if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
-        errMsg = "API Key Gemini tidak valid! Silakan periksa file .env Anda.";
-      } else if (errMsg.includes("429") || errMsg.includes("quota")) {
-        errMsg = "Quota Gemini habis. Silakan coba lagi nanti atau gunakan kunci API lain.";
-      }
-      
-      res.status(500).json({ error: errMsg });
+    const apiKeys = (process.env.GEMINI_API_KEY || "").split(",").map(k => k.trim()).filter(k => k);
+    
+    if (apiKeys.length === 0) {
+      return res.status(500).json({ error: "GEMINI_API_KEY environment variable is missing on the server" });
     }
 
+    let lastError = null;
 
+    // Try each API key until one works or we run out
+    for (const apiKey of apiKeys) {
+      try {
+        const { data } = req.body;
+        if (!data) {
+          return res.status(400).json({ error: "Data is required" });
+        }
+
+        const inputText = Object.entries(data)
+          .filter(([_, value]) => value !== undefined && value !== "")
+          .map(([key, value]) => '- ' + key + ': ' + value)
+          .join("\n");
+          
+        const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
+
+        console.log(`Generating RPP via /api/generate (using key: ${apiKey.substring(0, 8)}...)`);
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: prompt,
+          config: {
+            temperature: 0.7,
+            maxOutputTokens: 8192,
+          },
+        });
+
+        const responseText = response.text || "";
+        return res.json({ text: responseText });
+
+      } catch (error: any) {
+        lastError = error;
+        const msg = error.message || "";
+        console.error(`Key ${apiKey.substring(0, 8)}... failed:`, msg);
+        
+        // If it's not a quota error, stop trying other keys (unless you want to be safe)
+        if (!msg.includes("429") && !msg.includes("quota") && !msg.includes("limit")) {
+          break;
+        }
+        console.log("Quota exceeded for this key, trying next key...");
+      }
+    }
+
+    // If we get here, all keys failed
+    const error = lastError;
+    console.error("All API keys failed.");
+    let errMsg = error?.message || "Failed to generate RPP";
+
+    if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
+      errMsg = "API Key Gemini tidak valid! Silakan periksa file .env Anda.";
+    } else if (errMsg.includes("429") || errMsg.includes("quota")) {
+      errMsg = "Quota SEMUA API Key Gemini Anda telah habis. Silakan buat API Key baru di Google AI Studio atau tunggu beberapa saat.";
+    }
+    
+    res.status(500).json({ error: errMsg });
   });
 
   // Vite middleware for development
