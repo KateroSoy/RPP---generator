@@ -1,4 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
+
 
 const PROMPT_TEMPLATE = `Anda adalah seorang Ahli Kurikulum dan Guru Penggerak bersertifikasi dari Kemendikbudristek Indonesia.
 Tugas Anda adalah merancang Rencana Pelaksanaan Pembelajaran (RPP) atau Modul Ajar yang sangat detail, profesional, mutakhir, dan berstandar nasional, siap digunakan langsung oleh guru untuk keperluan akreditasi, supervisi, dan proses Kegiatan Belajar Mengajar (KBM) yang sebenarnya.
@@ -87,12 +89,42 @@ export default async function handler(req: any, res: any) {
     console.error("API error:", error);
     let errMsg = error.message || "Failed to generate RPP";
     
+    // Attempt Fallback to OpenAI if Gemini fails
+    const openAIKey = process.env.OPENAI_API_KEY;
+    if (openAIKey && openAIKey !== "MY_OPENAI_API_KEY") {
+      console.log("Gemini failed, attempting fallback to OpenAI...");
+      try {
+        const openai = new OpenAI({ apiKey: openAIKey });
+        const { data } = req.body;
+        const inputText = Object.entries(data)
+          .filter(([_, value]) => value !== undefined && value !== "")
+          .map(([key, value]) => '- ' + key + ': ' + value)
+          .join("\n");
+        const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
+
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: "You are an expert curriculum designer." },
+            { role: "user", content: prompt }
+          ],
+        });
+
+        const responseText = completion.choices[0].message.content || "";
+        console.log("OpenAI fallback successful");
+        return res.status(200).json({ text: responseText });
+      } catch (openaiError: any) {
+        console.error("OpenAI Fallback also failed:", openaiError.message);
+      }
+    }
+
     if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
       errMsg = "API Key Gemini tidak valid! Silakan periksa Vercel Environment Variables dan pastikan kunci API benar.";
     } else if (errMsg.includes("429") || errMsg.includes("quota")) {
-      errMsg = "Quota API Gemini telah habis (429). Silakan coba lagi nanti atau gunakan kunci API lain.";
+      errMsg = "Quota API Gemini telah habis (429). Mohon masukkan API Key OpenAI yang valid di Settings untuk menggunakan fallback otomatis.";
     }
 
     res.status(500).json({ error: errMsg });
   }
+
 }
