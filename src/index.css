@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .doc-editor h1 {
+    @apply text-2xl font-bold mt-6 mb-4;
+  }
+  .doc-editor h2 {
+    @apply text-xl font-bold mt-5 mb-3;
+  }
+  .doc-editor h3 {
+    @apply text-lg font-bold mt-4 mb-2;
+  }
+  .doc-editor p {
+    @apply mb-4 leading-relaxed;
+  }
+  .doc-editor ul {
+    @apply list-disc list-inside mb-4 pl-4;
+  }
+  .doc-editor ol {
+    @apply list-decimal list-inside mb-4 pl-4;
+  }
+  .doc-editor table {
+    @apply w-full border-collapse border border-gray-300 mb-6;
+    table-layout: fixed;
+    word-wrap: break-word;
+  }
+  .doc-editor th, .doc-editor td {
+    @apply border border-gray-300 p-2 text-left align-top;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  .doc-editor th {
+    @apply bg-gray-100 font-semibold;
+  }
+  .doc-editor strong, .doc-editor b {
+    @apply font-bold;
+  }
+  .doc-editor em, .doc-editor i {
+    @apply italic;
+  }
+}
