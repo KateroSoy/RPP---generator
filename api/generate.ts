@@ -1,4 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
+
 
 
 const PROMPT_TEMPLATE = `Anda adalah seorang Ahli Kurikulum dan Guru Penggerak bersertifikasi dari Kemendikbudristek Indonesia.
@@ -47,71 +49,72 @@ PENTING:
 `;
 
 export default async function handler(req: any, res: any) {
-  // Only allow POST requests
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const apiKeys = (process.env.GEMINI_API_KEY || "").split(",").map(k => k.trim()).filter(k => k);
-  
-  if (apiKeys.length === 0) {
-    return res.status(500).json({ error: "GEMINI_API_KEY environment variable is missing on the server" });
-  }
+  try {
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    const { data } = req.body;
+    if (!data) return res.status(400).json({ error: "Data is required" });
 
-  let lastError = null;
-
-  // Try each API key until one works or we run out
-  for (const apiKey of apiKeys) {
-    try {
-      const { data } = req.body;
-      if (!data) {
-        return res.status(400).json({ error: "Data is required" });
-      }
-
-      const inputText = Object.entries(data)
-        .filter(([_, value]) => value !== undefined && value !== "")
-        .map(([key, value]) => '- ' + key + ': ' + value)
-        .join("\n");
-        
-      const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
-
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: prompt,
-        config: {
-          temperature: 0.7,
-          maxOutputTokens: 8192,
-        },
-      });
-
-      const responseText = response.text || "";
-      return res.status(200).json({ text: responseText });
-
-    } catch (error: any) {
-      lastError = error;
-      const msg = error.message || "";
-      console.error(`Key ${apiKey.substring(0, 8)}... failed:`, msg);
+    const inputText = Object.entries(data)
+      .filter(([_, value]) => value !== undefined && value !== "")
+      .map(([key, value]) => '- ' + key + ': ' + value)
+      .join("\n");
       
-      if (!msg.includes("429") && !msg.includes("quota") && !msg.includes("limit")) {
-        break;
+    const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
+
+    // --- PRIMARY: OPENROUTER ---
+    if (openRouterKey && openRouterKey !== "YOUR_OPENROUTER_KEY") {
+      console.log("Generating RPP via OpenRouter...");
+      try {
+        const openai = new OpenAI({
+          baseURL: "https://openrouter.ai/api/v1",
+          apiKey: openRouterKey,
+          defaultHeaders: {
+            "HTTP-Referer": process.env.APP_URL || "http://localhost:3000",
+            "X-Title": "RPP Generator",
+          }
+        });
+
+        const completion = await openai.chat.completions.create({
+          model: "google/gemini-2.0-flash-001",
+          messages: [{ role: "user", content: prompt }],
+        });
+
+        const responseText = completion.choices[0].message.content || "";
+        return res.status(200).json({ text: responseText });
+      } catch (orError: any) {
+        console.error("OpenRouter failed:", orError.message);
       }
-      console.log("Quota exceeded, trying next key...");
     }
-  }
 
-  // If we get here, all keys failed
-  const error = lastError;
-  let errMsg = error?.message || "Failed to generate RPP";
-  
-  if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
-    errMsg = "API Key Gemini tidak valid! Silakan periksa Vercel Environment Variables dan pastikan kunci API benar.";
-  } else if (errMsg.includes("429") || errMsg.includes("quota")) {
-    errMsg = "Quota SEMUA API Key Gemini Anda telah habis. Silakan tambahkan API Key baru di Vercel Settings.";
-  }
+    // --- SECONDARY: GEMINI DIRECT ---
+    const apiKeys = (process.env.GEMINI_API_KEY || "").split(",").map(k => k.trim()).filter(k => k);
+    if (apiKeys.length > 0) {
+      for (const apiKey of apiKeys) {
+        try {
+          console.log(`Generating RPP via Gemini Direct (key: ${apiKey.substring(0, 8)}...)`);
+          const ai = new GoogleGenAI({ apiKey });
+          const response = await ai.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: prompt,
+            config: { temperature: 0.7, maxOutputTokens: 8192 },
+          });
+          return res.status(200).json({ text: response.text || "" });
+        } catch (error: any) {
+          console.error(`Gemini Key failed:`, error.message);
+        }
+      }
+    }
 
-  res.status(500).json({ error: errMsg });
+    throw new Error("All AI services failed or were not configured.");
+
+  } catch (error: any) {
+    console.error("Critical API error:", error.message);
+    res.status(500).json({ error: error.message || "Failed to generate RPP" });
+  }
 }
+
 
 
 }
