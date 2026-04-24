@@ -4,6 +4,8 @@ import { getRppDocumentById, updateRppDocument } from '../lib/db';
 import { useAuth } from '../AuthContext';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/forms';
+import { LoadingScreen } from '../components/ui/loading-screen';
+
 import { exportToDOCXBase } from '../lib/utils';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
@@ -186,7 +188,9 @@ export default function EditRPP() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <LoadingScreen isLoading={saving} message="Sedang menyimpan..." />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 line-clamp-1">{documentData.title}</h1>
           <p className="text-sm text-gray-500">Edit dokumen secara langsung di editor, lalu simpan atau unduh.</p>

@@ -5,6 +5,9 @@ import { useAuth } from '../AuthContext';
 import { saveRppDocument, canGenerateRPP, incrementGenerateCount } from '../lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input, Button, Label, Select, Textarea } from '../components/ui/forms';
+import { LoadingScreen } from '../components/ui/loading-screen';
+import { Loader2 } from 'lucide-react';
+
 
 export default function NewRPP() {
   const { user } = useAuth();
@@ -112,6 +115,8 @@ export default function NewRPP() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      <LoadingScreen isLoading={loading} />
+
       <div className="mb-8">
         <div className="flex justify-between items-start">
           <div>
@@ -273,13 +278,17 @@ export default function NewRPP() {
             {step < 2 ? (
               <Button onClick={() => setStep(step + 1)}>Selanjutnya</Button>
             ) : (
-              <Button onClick={handleGenerate} disabled={loading} className="gap-2">
+              <Button onClick={handleGenerate} disabled={loading} className="gap-2 min-w-[140px]">
                 {loading ? (
-                  <><span className="animate-pulse">Membuat RPP Anda...</span></>
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Memproses...</span>
+                  </>
                 ) : (
                   <>Generate RPP</>
                 )}
               </Button>
+
             )}
           </div>
         </CardContent>
