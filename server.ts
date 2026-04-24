@@ -81,18 +81,18 @@ async function startServer() {
       const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
 
       const ai = new GoogleGenAI({ apiKey });
-      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-      const response = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: prompt,
+        config: {
           temperature: 0.7,
           maxOutputTokens: 8192,
         },
       });
 
-      const responseText = response.response.text();
+      const responseText = response.text || "";
       res.json({ text: responseText });
+
 
     } catch (error: any) {
       console.error("API error:", error);

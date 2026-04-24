@@ -70,21 +70,18 @@ export default async function handler(req: any, res: any) {
     const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
 
     const ai = new GoogleGenAI({ apiKey });
-    const model = ai.getGenerativeModel({ 
+    const response = await ai.models.generateContent({
       model: "gemini-1.5-flash",
-      generationConfig: {
+      contents: prompt,
+      config: {
         temperature: 0.7,
         maxOutputTokens: 8192,
       },
     });
 
-    const response = await model.generateContent(prompt);
-
-
-    const result = await response.response;
-    const responseText = result.text();
-    
+    const responseText = response.text || "";
     res.status(200).json({ text: responseText });
+
   } catch (error: any) {
     console.error("API error:", error);
     let errMsg = error.message || "Failed to generate RPP";
