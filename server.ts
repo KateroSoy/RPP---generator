@@ -5,7 +5,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
-import OpenAI from "openai";
+
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -105,43 +105,15 @@ async function startServer() {
       
       let errMsg = error.message || "Failed to generate RPP";
 
-      // Attempt Fallback to OpenAI if Gemini fails with Quota or other issues
-      const openAIKey = process.env.OPENAI_API_KEY;
-      if (openAIKey && openAIKey !== "MY_OPENAI_API_KEY") {
-        console.log("Gemini failed, attempting fallback to OpenAI...");
-        try {
-          const openai = new OpenAI({ apiKey: openAIKey });
-          const { data } = req.body;
-          const inputText = Object.entries(data)
-            .filter(([_, value]) => value !== undefined && value !== "")
-            .map(([key, value]) => '- ' + key + ': ' + value)
-            .join("\n");
-          const prompt = PROMPT_TEMPLATE.replace("{DATA_INPUT}", inputText);
-
-          const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [
-              { role: "system", content: "You are an expert curriculum designer." },
-              { role: "user", content: prompt }
-            ],
-          });
-
-          const responseText = completion.choices[0].message.content || "";
-          console.log("OpenAI fallback successful");
-          return res.json({ text: responseText });
-        } catch (openaiError: any) {
-          console.error("OpenAI Fallback also failed:", openaiError.message);
-        }
-      }
-
       if (errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID")) {
         errMsg = "API Key Gemini tidak valid! Silakan periksa file .env Anda.";
       } else if (errMsg.includes("429") || errMsg.includes("quota")) {
-        errMsg = "Quota Gemini habis. Mohon masukkan API Key OpenAI yang valid di file .env untuk menggunakan fallback otomatis.";
+        errMsg = "Quota Gemini habis. Silakan coba lagi nanti atau gunakan kunci API lain.";
       }
       
       res.status(500).json({ error: errMsg });
     }
+
 
   });
 
